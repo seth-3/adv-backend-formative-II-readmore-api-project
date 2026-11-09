@@ -1,4 +1,5 @@
 const Author = require('../models/Author');
+const Book = require('../models/Book');
 const isValidId = require('../utils/validateId');
 
 const authorNotFound = (res, id) =>
@@ -55,10 +56,23 @@ const deleteAuthor = async (req, res) => {
   res.json({ message: `Author "${author.name}" deleted` });
 };
 
+// GET /authors/:id/books
+const getAuthorBooks = async (req, res) => {
+  const { id } = req.params;
+  if (!isValidId(id)) return authorNotFound(res, id);
+
+  const author = await Author.findById(id);
+  if (!author) return authorNotFound(res, id);
+
+  const books = await Book.find({ author: id }).sort({ publishedYear: 1 });
+  res.json({ author, count: books.length, books });
+};
+
 module.exports = {
   createAuthor,
   getAuthors,
   getAuthorById,
   updateAuthor,
   deleteAuthor,
+  getAuthorBooks,
 };
