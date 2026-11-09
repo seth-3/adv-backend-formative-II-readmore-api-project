@@ -1,0 +1,150 @@
+# ReadMore API - demo requests
+# Works with the VS Code "REST Client" extension. Click "Send Request" above each one.
+# After creating authors/books, paste the returned _id values into the variables below.
+
+@base = http://localhost:3000
+@authorId = PASTE_AUTHOR_ID
+@otherAuthorId = PASTE_OTHER_AUTHOR_ID
+@emptyAuthorId = PASTE_EMPTY_AUTHOR_ID
+@bookId = PASTE_BOOK_ID
+
+### Health check
+GET {{base}}/
+
+########## AUTHORS ##########
+
+### Create author
+POST {{base}}/authors
+Content-Type: application/json
+
+{ "name": "Chinua Achebe", "country": "Nigeria", "bio": "Nigerian novelist and poet" }
+
+### Create a second author
+POST {{base}}/authors
+Content-Type: application/json
+
+{ "name": "Ngugi wa Thiong'o", "country": "Kenya" }
+
+### Create an author who will have no books (for stats + delete demos)
+POST {{base}}/authors
+Content-Type: application/json
+
+{ "name": "New Writer" }
+
+### Get all authors
+GET {{base}}/authors
+
+### Get one author
+GET {{base}}/authors/{{authorId}}
+
+### Get author that does not exist -> 404
+GET {{base}}/authors/000000000000000000000000
+
+### Update author
+PUT {{base}}/authors/{{authorId}}
+Content-Type: application/json
+
+{ "bio": "Author of Things Fall Apart" }
+
+### Get all books by an author
+GET {{base}}/authors/{{authorId}}/books
+
+########## BOOKS ##########
+
+### Create book
+POST {{base}}/books
+Content-Type: application/json
+
+{ "title": "Things Fall Apart", "genre": "Novel", "price": 12.5, "publishedYear": 1958, "author": "{{authorId}}" }
+
+### Create more books
+POST {{base}}/books
+Content-Type: application/json
+
+{ "title": "Arrow of God", "genre": "Novel", "price": 18, "publishedYear": 1964, "author": "{{authorId}}" }
+
+###
+POST {{base}}/books
+Content-Type: application/json
+
+{ "title": "Anthills of the Savannah", "genre": "Novel", "price": 30, "publishedYear": 1987, "author": "{{authorId}}" }
+
+### Same title, different author -> allowed
+POST {{base}}/books
+Content-Type: application/json
+
+{ "title": "Things Fall Apart", "genre": "Drama", "price": 9, "publishedYear": 2010, "author": "{{otherAuthorId}}" }
+
+### Get all books (author is populated)
+GET {{base}}/books
+
+### Get one book
+GET {{base}}/books/{{bookId}}
+
+### Update book
+PUT {{base}}/books/{{bookId}}
+Content-Type: application/json
+
+{ "price": 14 }
+
+### Delete book
+DELETE {{base}}/books/{{bookId}}
+
+########## PART 4 - BUSINESS RULES ##########
+
+### Rule 1 - orphan book (author does not exist) -> 400
+POST {{base}}/books
+Content-Type: application/json
+
+{ "title": "Ghost Book", "genre": "Mystery", "price": 10, "publishedYear": 2020, "author": "000000000000000000000000" }
+
+### Rule 2 - duplicate title for the same author, different case -> 409
+POST {{base}}/books
+Content-Type: application/json
+
+{ "title": "things fall apart", "genre": "Novel", "price": 12, "publishedYear": 1958, "author": "{{authorId}}" }
+
+### Rule 3 - price zero -> 422
+POST {{base}}/books
+Content-Type: application/json
+
+{ "title": "Free Book", "genre": "Novel", "price": 0, "publishedYear": 2000, "author": "{{authorId}}" }
+
+### Rule 3 - year in the future -> 422
+POST {{base}}/books
+Content-Type: application/json
+
+{ "title": "Future Book", "genre": "Sci-Fi", "price": 10, "publishedYear": 2999, "author": "{{authorId}}" }
+
+### Rule 3 - year before 1450 -> 422
+POST {{base}}/books
+Content-Type: application/json
+
+{ "title": "Ancient Book", "genre": "History", "price": 10, "publishedYear": 1200, "author": "{{authorId}}" }
+
+### Rule 5 - filters (any combination)
+GET {{base}}/books?genre=Novel&minPrice=10&maxPrice=20
+
+###
+GET {{base}}/books?search=the&sort=price&order=desc
+
+###
+GET {{base}}/books?author={{authorId}}&sort=publishedYear
+
+### Rule 6 - author stats
+GET {{base}}/authors/{{authorId}}/stats
+
+### Rule 6 - stats for author with no books
+GET {{base}}/authors/{{emptyAuthorId}}/stats
+
+### Rule 4 - delete author who still has books -> 409
+DELETE {{base}}/authors/{{authorId}}
+
+### Rule 4 - delete author with no books -> 200 (run this last)
+DELETE {{base}}/authors/{{emptyAuthorId}}
+
+### Challenge - pagination
+GET {{base}}/books?sort=price&page=1&limit=2
+
+###
+GET {{base}}/books?sort=price&page=2&limit=2
