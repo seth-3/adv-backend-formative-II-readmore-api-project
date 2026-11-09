@@ -146,16 +146,50 @@ const buildBookQuery = (query) => {
   return { filter, sort: sortBy };
 };
 
-// GET /books?genre=&minPrice=&maxPrice=&author=&search=&sort=&order=
+// Challenge - pagination.
+// page and limit are optional. Without a limit every matching book is returned
+// on a single page, so the "no params = everything" behaviour still holds.
+const parsePagination = ({ page, limit }) => {
+  const pageNumber = page === undefined ? 1 : Number(page);
+  const limitNumber = limit === undefined ? null : Number(limit);
+
+  if (!Number.isInteger(pageNumber) || pageNumber < 1) {
+    return { error: 'page must be a whole number of 1 or more' };
+  }
+  if (limitNumber !== null && (!Number.isInteger(limitNumber) || limitNumber < 1)) {
+    return { error: 'limit must be a whole number of 1 or more' };
+  }
+  return { page: pageNumber, limit: limitNumber };
+};
+
+// GET /books?genre=&minPrice=&maxPrice=&author=&search=&sort=&order=&page=&limit=
 const getBooks = async (req, res) => {
   const { filter, sort, error } = buildBookQuery(req.query);
   if (error) return res.status(400).json({ message: error });
 
-  let query = Book.find(filter).populate('author', AUTHOR_FIELDS);
-  if (sort) query = query.sort(sort);
+  const pagination = parsePagination(req.query);
+  if (pagination.error) return res.status(400).json({ message: pagination.error });
+  const { page } = pagination;
 
-  const books = await query;
-  res.json(books);
+  const total = await Book.countDocuments(filter);
+  const limit = pagination.limit ?? total;
+
+  // _id as a tie-breaker keeps the order stable between pages
+  let query = Book.find(filter)
+    .sort({ ...sort, _id: 1 })
+    .populate('author', AUTHOR_FIELDS);
+  if (pagination.limit !== null) {
+    query = query.skip((page - 1) * limit).limit(limit);
+  }
+
+  const results = await query;
+  res.json({
+    page,
+    limit,
+    total,
+    totalPages: limit > 0 ? Math.ceil(total / limit) : 0,
+    results,
+  });
 };
 
 // GET /books/:id
