@@ -94,9 +94,67 @@ const createBook = async (req, res) => {
   res.status(201).json(book);
 };
 
-// GET /books
+// Escape characters that have a special meaning in regular expressions,
+// so a search like "c++" is treated as plain text
+const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const SORTABLE_FIELDS = ['price', 'title', 'publishedYear'];
+
+// Rule 5 - Build the filter dynamically.
+// Start from an empty filter and add a condition only for each query param that
+// is actually present. No params -> {} -> every book.
+// Returns { filter, sort } or { error } if a param is invalid.
+const buildBookQuery = (query) => {
+  const { genre, minPrice, maxPrice, author, search, sort, order } = query;
+  const filter = {};
+
+  if (genre) {
+    filter.genre = new RegExp(`^${escapeRegex(String(genre))}$`, 'i');
+  }
+
+  if (minPrice !== undefined || maxPrice !== undefined) {
+    filter.price = {};
+    if (minPrice !== undefined) {
+      if (!Number.isFinite(Number(minPrice))) return { error: 'minPrice must be a number' };
+      filter.price.$gte = Number(minPrice);
+    }
+    if (maxPrice !== undefined) {
+      if (!Number.isFinite(Number(maxPrice))) return { error: 'maxPrice must be a number' };
+      filter.price.$lte = Number(maxPrice);
+    }
+  }
+
+  if (author) {
+    if (!isValidId(author)) return { error: 'author must be a valid author id' };
+    filter.author = author;
+  }
+
+  if (search) {
+    filter.title = new RegExp(escapeRegex(String(search)), 'i');
+  }
+
+  let sortBy;
+  if (sort) {
+    if (!SORTABLE_FIELDS.includes(sort)) {
+      return { error: `sort must be one of: ${SORTABLE_FIELDS.join(', ')}` };
+    }
+    const direction = String(order || 'asc').toLowerCase();
+    if (!['asc', 'desc'].includes(direction)) return { error: 'order must be asc or desc' };
+    sortBy = { [sort]: direction === 'asc' ? 1 : -1 };
+  }
+
+  return { filter, sort: sortBy };
+};
+
+// GET /books?genre=&minPrice=&maxPrice=&author=&search=&sort=&order=
 const getBooks = async (req, res) => {
-  const books = await Book.find().populate('author', AUTHOR_FIELDS);
+  const { filter, sort, error } = buildBookQuery(req.query);
+  if (error) return res.status(400).json({ message: error });
+
+  let query = Book.find(filter).populate('author', AUTHOR_FIELDS);
+  if (sort) query = query.sort(sort);
+
+  const books = await query;
   res.json(books);
 };
 
