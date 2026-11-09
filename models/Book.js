@@ -30,4 +30,12 @@ const bookSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Safety net for rule 2: if two identical requests arrive at the same moment,
+// both could pass the controller check. This unique, case-insensitive index
+// makes the database reject the second one.
+bookSchema.index(
+  { author: 1, title: 1 },
+  { unique: true, collation: { locale: 'en', strength: 2 } }
+);
+
 module.exports = mongoose.model('Book', bookSchema);

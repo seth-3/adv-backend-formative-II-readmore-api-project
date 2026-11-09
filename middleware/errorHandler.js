@@ -21,6 +21,11 @@ const errorHandler = (err, req, res, next) => {
     return res.status(400).json({ message: `Invalid value for ${err.path}: ${err.value}` });
   }
 
+  // Unique index violation (e.g. duplicate title for the same author)
+  if (err.code === 11000) {
+    return res.status(409).json({ message: 'A record with the same unique values already exists' });
+  }
+
   console.error(err);
   res.status(500).json({ message: 'Something went wrong on the server' });
 };

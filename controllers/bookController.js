@@ -43,9 +43,22 @@ const checkPriceAndYear = ({ price, publishedYear }) => {
   return problems;
 };
 
+// Rule 2 - No duplicate titles per author (case-insensitive).
+// The check is scoped to one author, so two different authors can both have "Home".
+// A collation with strength 2 makes the comparison ignore upper/lower case.
+// excludeId lets an update keep its own title without clashing with itself.
+const CASE_INSENSITIVE = { locale: 'en', strength: 2 };
+
+const isDuplicateTitle = async ({ title, author }, excludeId) => {
+  const filter = { author, title: String(title).trim() };
+  if (excludeId) filter._id = { $ne: excludeId };
+  const existing = await Book.findOne(filter).collation(CASE_INSENSITIVE);
+  return existing !== null;
+};
+
 // Runs the business rules against the book as it will look once saved.
 // Returns { status, body } when a rule is broken, or null when everything passes.
-const checkBookRules = async (book) => {
+const checkBookRules = async (book, excludeId) => {
   if (book.author === undefined || book.author === null || book.author === '') {
     return { status: 400, body: { message: 'author is required' } };
   }
@@ -56,6 +69,13 @@ const checkBookRules = async (book) => {
   const problems = checkPriceAndYear(book);
   if (problems.length > 0) {
     return { status: 422, body: { message: 'Invalid book data', errors: problems } };
+  }
+
+  if (book.title && (await isDuplicateTitle(book, excludeId))) {
+    return {
+      status: 409,
+      body: { message: `This author already has a book titled "${String(book.title).trim()}"` },
+    };
   }
 
   return null;
@@ -112,7 +132,7 @@ const updateBook = async (req, res) => {
     price: changes.price,
     publishedYear: changes.publishedYear,
   };
-  const broken = await checkBookRules(merged);
+  const broken = await checkBookRules(merged, book._id);
   if (broken) return res.status(broken.status).json(broken.body);
 
   book.set(changes);
