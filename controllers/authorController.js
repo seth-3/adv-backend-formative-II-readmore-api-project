@@ -80,6 +80,40 @@ const getAuthorBooks = async (req, res) => {
   res.json({ author, count: books.length, books });
 };
 
+// GET /authors/:id/stats
+// Rule 6 - Summary of an author's books.
+// With no books there is nothing to average, so bookCount is 0 and the other
+// values are null ("no value") rather than 0, which would look like a real price.
+const getAuthorStats = async (req, res) => {
+  const { id } = req.params;
+  if (!isValidId(id)) return authorNotFound(res, id);
+
+  const author = await Author.findById(id);
+  if (!author) return authorNotFound(res, id);
+
+  const books = await Book.find({ author: id }).sort({ price: 1, title: 1 });
+
+  if (books.length === 0) {
+    return res.json({
+      author: author.name,
+      bookCount: 0,
+      averagePrice: null,
+      cheapestBook: null,
+      mostExpensiveBook: null,
+    });
+  }
+
+  const total = books.reduce((sum, book) => sum + book.price, 0);
+
+  res.json({
+    author: author.name,
+    bookCount: books.length,
+    averagePrice: Math.round((total / books.length) * 100) / 100,
+    cheapestBook: books[0].title,
+    mostExpensiveBook: books[books.length - 1].title,
+  });
+};
+
 module.exports = {
   createAuthor,
   getAuthors,
@@ -87,4 +121,5 @@ module.exports = {
   updateAuthor,
   deleteAuthor,
   getAuthorBooks,
+  getAuthorStats,
 };
