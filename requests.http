@@ -1,35 +1,50 @@
 # ReadMore API - demo requests
-# Works with the VS Code "REST Client" extension. Click "Send Request" above each one.
-# After creating authors/books, paste the returned _id values into the variables below.
+# Uses the VS Code "REST Client" extension: click "Send Request" above each request.
+#
+# Run them TOP TO BOTTOM. Ids are picked up automatically from earlier responses
+# (the "# @name" lines), so there is nothing to copy and paste.
+# Start from an empty database, or the "create" requests will clash with
+# what is already there (that is rule 2 working).
 
 @base = http://localhost:3000
-@authorId = PASTE_AUTHOR_ID
-@otherAuthorId = PASTE_OTHER_AUTHOR_ID
-@emptyAuthorId = PASTE_EMPTY_AUTHOR_ID
-@bookId = PASTE_BOOK_ID
+
+@authorId = {{createAchebe.response.body.$._id}}
+@otherAuthorId = {{createNgugi.response.body.$._id}}
+@emptyAuthorId = {{createEmptyAuthor.response.body.$._id}}
+@bookId = {{createThingsFallApart.response.body.$._id}}
+@spareBookId = {{createSpareBook.response.body.$._id}}
 
 ### Health check
 GET {{base}}/
 
-########## AUTHORS ##########
+########################## AUTHORS ##########################
 
-### Create author
+### 1. Create author
+# @name createAchebe
 POST {{base}}/authors
 Content-Type: application/json
 
 { "name": "Chinua Achebe", "country": "Nigeria", "bio": "Nigerian novelist and poet" }
 
-### Create a second author
+### 2. Create a second author
+# @name createNgugi
 POST {{base}}/authors
 Content-Type: application/json
 
 { "name": "Ngugi wa Thiong'o", "country": "Kenya" }
 
-### Create an author who will have no books (for stats + delete demos)
+### 3. Create an author who will have no books (for the stats + delete demos)
+# @name createEmptyAuthor
 POST {{base}}/authors
 Content-Type: application/json
 
 { "name": "New Writer" }
+
+### Create author without a name -> 400
+POST {{base}}/authors
+Content-Type: application/json
+
+{ "country": "Ghana" }
 
 ### Get all authors
 GET {{base}}/authors
@@ -37,7 +52,7 @@ GET {{base}}/authors
 ### Get one author
 GET {{base}}/authors/{{authorId}}
 
-### Get author that does not exist -> 404
+### Get an author that does not exist -> 404
 GET {{base}}/authors/000000000000000000000000
 
 ### Update author
@@ -46,12 +61,16 @@ Content-Type: application/json
 
 { "bio": "Author of Things Fall Apart" }
 
-### Get all books by an author
-GET {{base}}/authors/{{authorId}}/books
+### Update an author that does not exist -> 404
+PUT {{base}}/authors/000000000000000000000000
+Content-Type: application/json
 
-########## BOOKS ##########
+{ "bio": "Nobody" }
+
+########################## BOOKS ##########################
 
 ### Create book
+# @name createThingsFallApart
 POST {{base}}/books
 Content-Type: application/json
 
@@ -69,30 +88,52 @@ Content-Type: application/json
 
 { "title": "Anthills of the Savannah", "genre": "Novel", "price": 30, "publishedYear": 1987, "author": "{{authorId}}" }
 
-### Same title, different author -> allowed
+###
+POST {{base}}/books
+Content-Type: application/json
+
+{ "title": "A Grain of Wheat", "genre": "Novel", "price": 15, "publishedYear": 1967, "author": "{{otherAuthorId}}" }
+
+### Same title as an Achebe book, but a DIFFERENT author -> allowed (201)
 POST {{base}}/books
 Content-Type: application/json
 
 { "title": "Things Fall Apart", "genre": "Drama", "price": 9, "publishedYear": 2010, "author": "{{otherAuthorId}}" }
 
-### Get all books (author is populated)
+### A book we will delete later
+# @name createSpareBook
+POST {{base}}/books
+Content-Type: application/json
+
+{ "title": "Draft Manuscript", "genre": "Essays", "price": 5, "publishedYear": 2020, "author": "{{otherAuthorId}}" }
+
+### Get all books (author details are populated)
 GET {{base}}/books
 
-### Get one book
+### Get one book (author details are populated)
 GET {{base}}/books/{{bookId}}
 
-### Update book
+### Get a book that does not exist -> 404
+GET {{base}}/books/000000000000000000000000
+
+### Update book (send only the fields that change)
 PUT {{base}}/books/{{bookId}}
 Content-Type: application/json
 
 { "price": 14 }
 
+### Get all books by one author (linking endpoint)
+GET {{base}}/authors/{{authorId}}/books
+
 ### Delete book
-DELETE {{base}}/books/{{bookId}}
+DELETE {{base}}/books/{{spareBookId}}
 
-########## PART 4 - BUSINESS RULES ##########
+### Delete the same book again -> 404
+DELETE {{base}}/books/{{spareBookId}}
 
-### Rule 1 - orphan book (author does not exist) -> 400
+########################## PART 4 - BUSINESS RULES ##########################
+
+### Rule 1 - orphan book: author id does not exist -> 400
 POST {{base}}/books
 Content-Type: application/json
 
@@ -102,13 +143,25 @@ Content-Type: application/json
 POST {{base}}/books
 Content-Type: application/json
 
-{ "title": "things fall apart", "genre": "Novel", "price": 12, "publishedYear": 1958, "author": "{{authorId}}" }
+{ "title": "things fall APART", "genre": "Novel", "price": 12, "publishedYear": 1958, "author": "{{authorId}}" }
+
+### Rule 2 - renaming a book to a title the author already has -> 409
+PUT {{base}}/books/{{bookId}}
+Content-Type: application/json
+
+{ "title": "ARROW OF GOD" }
 
 ### Rule 3 - price zero -> 422
 POST {{base}}/books
 Content-Type: application/json
 
 { "title": "Free Book", "genre": "Novel", "price": 0, "publishedYear": 2000, "author": "{{authorId}}" }
+
+### Rule 3 - negative price -> 422
+POST {{base}}/books
+Content-Type: application/json
+
+{ "title": "Cheap Book", "genre": "Novel", "price": -5, "publishedYear": 2000, "author": "{{authorId}}" }
 
 ### Rule 3 - year in the future -> 422
 POST {{base}}/books
@@ -122,29 +175,46 @@ Content-Type: application/json
 
 { "title": "Ancient Book", "genre": "History", "price": 10, "publishedYear": 1200, "author": "{{authorId}}" }
 
-### Rule 5 - filters (any combination)
+### Rule 5 - no filters -> every book
+GET {{base}}/books
+
+### Rule 5 - genre + price range
 GET {{base}}/books?genre=Novel&minPrice=10&maxPrice=20
 
-###
+### Rule 5 - only minPrice
+GET {{base}}/books?minPrice=15
+
+### Rule 5 - search in title + sort by price, most expensive first
 GET {{base}}/books?search=the&sort=price&order=desc
 
-###
-GET {{base}}/books?author={{authorId}}&sort=publishedYear
+### Rule 5 - one author's books, oldest first
+GET {{base}}/books?author={{authorId}}&sort=publishedYear&order=asc
+
+### Rule 5 - invalid sort field -> 400
+GET {{base}}/books?sort=colour
 
 ### Rule 6 - author stats
 GET {{base}}/authors/{{authorId}}/stats
 
-### Rule 6 - stats for author with no books
+### Rule 6 - stats for an author with no books (null values, no crash)
 GET {{base}}/authors/{{emptyAuthorId}}/stats
 
-### Rule 4 - delete author who still has books -> 409
+### Rule 4 - delete an author who still has books -> 409 (blocked)
 DELETE {{base}}/authors/{{authorId}}
 
-### Rule 4 - delete author with no books -> 200 (run this last)
+### Rule 4 - delete an author with no books -> 200
 DELETE {{base}}/authors/{{emptyAuthorId}}
 
-### Challenge - pagination
+### Rule 4 - that author is really gone -> 404
+GET {{base}}/authors/{{emptyAuthorId}}
+
+########################## CHALLENGE - PAGINATION ##########################
+
+### Page 1, two books per page
 GET {{base}}/books?sort=price&page=1&limit=2
 
-###
+### Page 2
 GET {{base}}/books?sort=price&page=2&limit=2
+
+### Pagination combined with a filter
+GET {{base}}/books?genre=Novel&sort=title&page=1&limit=3
